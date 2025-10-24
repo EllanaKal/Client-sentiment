@@ -1,0 +1,68 @@
+data = pd.DataFrame({
+    'customer_id': range(1, 21),
+    'month_end_balance': np.random.randint(500, 50000, 20),
+    'location': np.random.choice(['Ohio', 'New York', 'Texas', 'California'], 20),
+    'transaction_type': np.random.choice(['purchase', 'deposit', 'debit', 'transfer'], 20),
+    'loan_type': np.random.choice(['Auto Loan', 'Mortgage', 'Personal Loan'], 20)
+})
+
+# --- Filter only Auto Loan customers ---
+auto_loan_data = data[data['loan_type'] == 'Auto Loan'].copy()
+
+# --- Features for clustering ---
+features = ['month_end_balance', 'location', 'transaction_type']
+
+# --- Preprocessing pipeline ---
+# Numerical columns -> StandardScaler
+# Categorical columns -> OneHotEncoder
+numeric_features = ['month_end_balance']
+categorical_features = ['location', 'transaction_type']
+
+preprocessor = ColumnTransformer(
+    transformers=[
+        ('num', StandardScaler(), numeric_features),
+        ('cat', OneHotEncoder(handle_unknown='ignore'), categorical_features)
+    ]
+)
+
+# --- K-Means clustering pipeline ---
+kmeans_pipeline = Pipeline(steps=[
+    ('preprocess', preprocessor),
+    ('cluster', KMeans(n_clusters=3, random_state=42))
+])
+
+# --- Fit model ---
+auto_loan_data['cluster'] = kmeans_pipeline.fit_predict(auto_loan_data[features])
+
+# --- Attach cluster results ---
+clustered = auto_loan_data.copy()
+
+# --- Cluster summary (profiling) ---
+summary = clustered.groupby('cluster').agg({
+    'month_end_balance': ['mean', 'median', 'count'],
+    'location': lambda x: x.value_counts().index[0],
+    'transaction_type': lambda x: x.value_counts().index[0]
+}).reset_index()
+
+summary.columns = ['Cluster', 'Avg Balance', 'Median Balance', 'Count', 'Top Location', 'Top Transaction Type']
+
+print("\n--- Customer Cluster Summary ---")
+print(summary)
+
+# --- Dimensionality reduction for visualization ---
+processed_data = preprocessor.fit_transform(auto_loan_data[features])
+pca = PCA(n_components=2)
+reduced = pca.fit_transform(processed_data)
+auto_loan_data['PC1'] = reduced[:, 0]
+auto_loan_data['PC2'] = reduced[:, 1]
+
+# --- Plot clusters ---
+plt.figure(figsize=(8,6))
+sns.scatterplot(data=auto_loan_data, x='PC1', y='PC2', hue='cluster', palette='Set2', s=100)
+plt.title('Customer Segmentation for Auto Loan Marketing')
+plt.xlabel('Principal Component 1')
+plt.ylabel('Principal Component 2')
+plt.legend(title='Cluster')
+plt.grid(True)
+plt.tight_layout()
+plt.show()
